@@ -2734,8 +2734,11 @@ function buildJapaneseRows(lines) {
       continue;
     }
 
-    // 일본어 대사 안에 PDF/OCR이 만든 가짜 공백 정리
-line = line.replace(/\s+/g, " ").trim();
+    // 일본어 문자 사이에 PDF/OCR이 만든 가짜 공백 제거
+line = line
+  .replace(/([ぁ-んァ-ヶー一-龯々])\s+(?=[ぁ-んァ-ヶー一-龯々])/g, "$1")
+  .replace(/\s+/g, " ")
+  .trim();
 
     if (!line) continue;
 
