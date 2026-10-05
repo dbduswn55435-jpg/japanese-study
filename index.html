@@ -4978,133 +4978,75 @@ function renderAnalysis(
 ) {
 
   document
-    .getElementById(
-      "analysisLoading"
-    )
-    .classList.add(
-      "hidden"
-    );
-
+    .getElementById("analysisLoading")
+    .classList.add("hidden");
 
   const container =
-    document.getElementById(
-      "analysisContent"
-    );
+    document.getElementById("analysisContent");
 
+  container.innerHTML = "";
 
-  container.innerHTML =
-    "";
+  /* 읽기 + 로마자 + 뜻 */
+  const block =
+    document.createElement("div");
 
+  block.className =
+    "reading-block";
 
-  /* -----------------------------------------
-     발음 + 뜻
-  ----------------------------------------- */
-
-  const readings =
-    Array.isArray(
-      analysis.readings
-    )
-      ? analysis.readings
+  const meanings =
+    Array.isArray(analysis.meanings)
+      ? analysis.meanings
       : [];
 
+  block.innerHTML = `
+    <div class="reading-pinyin">
+      ${escapeHtml(analysis.reading || "")}
+      ${
+        analysis.romaji
+          ? ` · ${escapeHtml(analysis.romaji)}`
+          : ""
+      }
+    </div>
 
-  readings.forEach(
-    reading => {
+    <div class="reading-meaning">
+      ${
+        meanings
+          .map(
+            (meaning,index) =>
+              `${index + 1}. ${escapeHtml(meaning)}`
+          )
+          .join("<br>")
+      }
+    </div>
 
-      const block =
-        document.createElement(
-          "div"
-        );
-
-
-      block.className =
-        "reading-block";
-
-
-      const meanings =
-        Array.isArray(
-          reading.meanings
-        )
-          ? reading.meanings
-          : [];
-
-
-      block.innerHTML = `
-
-        <div class="reading-pinyin">
-          ${escapeHtml(
-            reading.pinyin ||
-            ""
-          )}
-        </div>
-
-        <div class="reading-meaning">
-
-          ${
-            meanings
-              .map(
-                (meaning,index) =>
-                  `${index + 1}. ${escapeHtml(meaning)}`
-              )
-              .join("<br>")
-          }
-
-        </div>
-
-        ${
-          reading.usage
-
-            ? `
-              <div class="reading-usage">
-                ${escapeHtml(
-                  reading.usage
-                )}
-              </div>
-            `
-
-            : ""
-        }
-
-      `;
-
-
-      container.appendChild(
-        block
-      );
-
+    ${
+      analysis.part_of_speech
+        ? `
+          <div class="reading-usage">
+            ${escapeHtml(analysis.part_of_speech)}
+          </div>
+        `
+        : ""
     }
-  );
+  `;
 
+  container.appendChild(block);
 
-  /* -----------------------------------------
-     단어 듣기 / 단어장 / 외움
-  ----------------------------------------- */
-
+  /* 듣기 / 단어장 / 외움 */
   const actions =
-    document.createElement(
-      "div"
-    );
-
+    document.createElement("div");
 
   actions.className =
     "analysis-actions";
 
-
-  /* 단어 듣기 */
-
   const audioButton =
-    document.createElement(
-      "button"
-    );
-
+    document.createElement("button");
 
   audioButton.className =
     "analysis-action";
 
-
   audioButton.textContent =
     "🔊 단어 듣기";
-
 
   audioButton.onclick =
     event => {
@@ -5118,404 +5060,197 @@ function renderAnalysis(
 
     };
 
-
-  /* 단어장 */
-
   const existingVocab =
     vocabulary.find(
-      item =>
-        item.word ===
-        selectedWord
+      item => item.word === selectedWord
     );
-
 
   const starButton =
-    document.createElement(
-      "button"
-    );
-
+    document.createElement("button");
 
   starButton.className =
     "analysis-action" +
-    (
-      existingVocab
-        ? " active"
-        : ""
-    );
-
+    (existingVocab ? " active" : "");
 
   starButton.textContent =
     existingVocab
       ? "⭐ 저장됨"
       : "☆ 단어장";
 
-
   starButton.onclick =
-    () => {
-
-      saveVocabulary(
-        analysis
-      );
-
-    };
-
-
-  /* 외움 */
+    () => saveVocabulary(analysis);
 
   const learned =
-    learnedWords.has(
-      selectedWord
-    );
-
+    learnedWords.has(selectedWord);
 
   const learnedButton =
-    document.createElement(
-      "button"
-    );
-
+    document.createElement("button");
 
   learnedButton.className =
     "analysis-action" +
-    (
-      learned
-        ? " active"
-        : ""
-    );
-
+    (learned ? " active" : "");
 
   learnedButton.textContent =
     learned
       ? "✓ 외움"
       : "✓ 외우기";
 
-
   learnedButton.onclick =
     async () => {
+      const word = selectedWord;
+      await toggleLearned(word);
 
-      const word =
-        selectedWord;
-
-
-      await toggleLearned(
-        word
-      );
-
-
-      /* 분석 중 선택 단어가 바뀌지 않았을 때만 */
-      if (
-        selectedWord ===
-        word
-      ) {
-
-        renderAnalysis(
-          analysis
-        );
-
+      if (selectedWord === word) {
+        renderAnalysis(analysis);
       }
-
     };
 
+  actions.appendChild(audioButton);
+  actions.appendChild(starButton);
+  actions.appendChild(learnedButton);
+  container.appendChild(actions);
 
-  actions.appendChild(
-    audioButton
-  );
-
-
-  actions.appendChild(
-    starButton
-  );
-
-
-  actions.appendChild(
-    learnedButton
-  );
-
-
-  container.appendChild(
-    actions
-  );
-
-
-  /* -----------------------------------------
-     한자 풀이
-  ----------------------------------------- */
-
+  /* 한자 풀이 */
   if (
-    Array.isArray(
-      analysis.characters
-    ) &&
-    analysis.characters.length
+    Array.isArray(analysis.kanji) &&
+    analysis.kanji.length
   ) {
 
     addSection(
-
       container,
-
       "한자 풀이",
-
-      analysis.characters
+      analysis.kanji
         .map(
           item => `
-
             <div class="analysis-item">
-
               <span class="hanja-char">
-                ${escapeHtml(
-                  item.character ||
-                  ""
-                )}
+                ${escapeHtml(item.character || "")}
               </span>
-
-              ${escapeHtml(
-                item.pinyin ||
-                ""
-              )}
-
+              ${escapeHtml(item.reading || "")}
               ·
-
-              ${escapeHtml(
-                item.korean_hanja ||
-                ""
-              )}
-
+              ${escapeHtml(item.korean_hanja || "")}
             </div>
-
           `
         )
         .join("")
-
     );
-
   }
 
-
-  /* -----------------------------------------
-     문법 · 어순
-  ----------------------------------------- */
-
+  /* 활용 */
   if (
-    analysis.grammar
+    Array.isArray(analysis.conjugations) &&
+    analysis.conjugations.length
   ) {
 
     addSection(
-
       container,
-
-      "문법 · 어순",
-
-      `<p>
-        ${escapeHtml(
-          analysis.grammar
-        )}
-      </p>`
-
-    );
-
-  }
-
-
-  /* -----------------------------------------
-     뉘앙스
-  ----------------------------------------- */
-
-  if (
-    analysis.nuance
-  ) {
-
-    addSection(
-
-      container,
-
-      "뉘앙스",
-
-      `<p>
-        ${escapeHtml(
-          analysis.nuance
-        )}
-      </p>`
-
-    );
-
-  }
-
-
-  /* -----------------------------------------
-     관련 표현
-  ----------------------------------------- */
-
-  if (
-    Array.isArray(
-      analysis.related
-    ) &&
-    analysis.related.length
-  ) {
-
-    addSection(
-
-      container,
-
-      "관련 표현",
-
-      analysis.related
+      "활용",
+      analysis.conjugations
         .map(
           item => `
-
             <div class="analysis-item">
-
-              <strong>
-                ${escapeHtml(
-                  item.expression ||
-                  ""
-                )}
-              </strong>
-
-              &nbsp;
-
-              ${escapeHtml(
-                item.pinyin ||
-                ""
-              )}
-
-              <br>
-
-              ${escapeHtml(
-                item.meaning ||
-                ""
-              )}
-
-            </div>
-
-          `
-        )
-        .join("")
-
-    );
-
-  }
-
-
-  /* -----------------------------------------
-     유의어
-  ----------------------------------------- */
-
-  if (
-    Array.isArray(
-      analysis.synonyms
-    ) &&
-    analysis.synonyms.length
-  ) {
-
-    addSection(
-
-      container,
-
-      "유의어",
-
-      analysis.synonyms
-        .map(
-          item => `
-
-            <div class="analysis-item">
-
-              <strong>
-                ${escapeHtml(
-                  item.word ||
-                  ""
-                )}
-              </strong>
-
-              &nbsp;
-
-              ${escapeHtml(
-                item.pinyin ||
-                ""
-              )}
-
-              ·
-
-              ${escapeHtml(
-                item.meaning ||
-                ""
-              )}
-
+              <strong>${escapeHtml(item.label || "")}</strong>
+              · ${escapeHtml(item.form || "")}
               ${
-                item.difference
-
-                  ? `
-                    <br>
-                    <small>
-                      ${escapeHtml(
-                        item.difference
-                      )}
-                    </small>
-                  `
-
+                item.reading
+                  ? `<br><small>${escapeHtml(item.reading)}</small>`
                   : ""
               }
-
             </div>
-
           `
         )
         .join("")
-
     );
-
   }
 
+  if (analysis.grammar) {
+    addSection(
+      container,
+      "문법 · 품사",
+      `<p>${escapeHtml(analysis.grammar)}</p>`
+    );
+  }
 
-  /* -----------------------------------------
-     반의어
-  ----------------------------------------- */
+  if (analysis.nuance) {
+    addSection(
+      container,
+      "뉘앙스",
+      `<p>${escapeHtml(analysis.nuance)}</p>`
+    );
+  }
 
   if (
-    Array.isArray(
-      analysis.antonyms
-    ) &&
+    Array.isArray(analysis.related) &&
+    analysis.related.length
+  ) {
+    addSection(
+      container,
+      "관련 표현",
+      analysis.related
+        .map(
+          item => `
+            <div class="analysis-item">
+              <strong>${escapeHtml(item.expression || "")}</strong>
+              &nbsp; ${escapeHtml(item.reading || "")}
+              ${
+                item.romaji
+                  ? ` · ${escapeHtml(item.romaji)}`
+                  : ""
+              }
+              <br>
+              ${escapeHtml(item.meaning || "")}
+            </div>
+          `
+        )
+        .join("")
+    );
+  }
+
+  if (
+    Array.isArray(analysis.synonyms) &&
+    analysis.synonyms.length
+  ) {
+    addSection(
+      container,
+      "유의어",
+      analysis.synonyms
+        .map(
+          item => `
+            <div class="analysis-item">
+              <strong>${escapeHtml(item.word || "")}</strong>
+              &nbsp; ${escapeHtml(item.reading || "")}
+              · ${escapeHtml(item.meaning || "")}
+              ${
+                item.difference
+                  ? `<br><small>${escapeHtml(item.difference)}</small>`
+                  : ""
+              }
+            </div>
+          `
+        )
+        .join("")
+    );
+  }
+
+  if (
+    Array.isArray(analysis.antonyms) &&
     analysis.antonyms.length
   ) {
-
     addSection(
-
       container,
-
       "반의어",
-
       analysis.antonyms
         .map(
           item => `
-
             <div class="analysis-item">
-
-              <strong>
-                ${escapeHtml(
-                  item.word ||
-                  ""
-                )}
-              </strong>
-
-              &nbsp;
-
-              ${escapeHtml(
-                item.pinyin ||
-                ""
-              )}
-
-              ·
-
-              ${escapeHtml(
-                item.meaning ||
-                ""
-              )}
-
+              <strong>${escapeHtml(item.word || "")}</strong>
+              &nbsp; ${escapeHtml(item.reading || "")}
+              · ${escapeHtml(item.meaning || "")}
             </div>
-
           `
         )
         .join("")
-
     );
-
   }
 
 }
