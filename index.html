@@ -3813,10 +3813,19 @@ function renderSegmentedSentence(
       "word";
 
 
-    if (
-      learnedWords.has(
+    const segmentAnalysis =
+      analysisMemory.get(segment.text);
+
+    const segmentCanonicalWord =
+      String(
+        segmentAnalysis?.dictionary_form ||
+        segmentAnalysis?.word ||
         segment.text
-      )
+      ).trim();
+
+    if (
+      learnedWords.has(segment.text) ||
+      learnedWords.has(segmentCanonicalWord)
     ) {
 
       span.classList.add(
@@ -4962,6 +4971,20 @@ async function getWordAnalysis(
     data.analysis
   );
 
+  const canonicalWord =
+    String(
+      data.analysis?.dictionary_form ||
+      data.analysis?.word ||
+      word
+    ).trim();
+
+  if (canonicalWord) {
+    analysisMemory.set(
+      canonicalWord,
+      data.analysis
+    );
+  }
+
 
   return data.analysis;
 
@@ -4986,6 +5009,14 @@ function renderAnalysis(
 
   container.innerHTML = "";
 
+  const canonicalWord =
+    String(
+      analysis?.dictionary_form ||
+      analysis?.word ||
+      selectedWord ||
+      ""
+    ).trim();
+
   /* 읽기 + 로마자 + 뜻 */
   const block =
     document.createElement("div");
@@ -4999,6 +5030,12 @@ function renderAnalysis(
       : [];
 
   block.innerHTML = `
+    ${
+      canonicalWord &&
+      canonicalWord !== selectedWord
+        ? `<div class="reading-usage">사전형 · ${escapeHtml(canonicalWord)}</div>`
+        : ""
+    }
     <div class="reading-pinyin">
       ${escapeHtml(analysis.reading || "")}
       ${
@@ -5055,14 +5092,14 @@ function renderAnalysis(
 
       showSpeechRateChoices(
         audioButton,
-        selectedWord
+        canonicalWord || selectedWord
       );
 
     };
 
   const existingVocab =
     vocabulary.find(
-      item => item.word === selectedWord
+      item => item.word === canonicalWord
     );
 
   const starButton =
@@ -5081,7 +5118,7 @@ function renderAnalysis(
     () => saveVocabulary(analysis);
 
   const learned =
-    learnedWords.has(selectedWord);
+    learnedWords.has(canonicalWord);
 
   const learnedButton =
     document.createElement("button");
@@ -5097,10 +5134,17 @@ function renderAnalysis(
 
   learnedButton.onclick =
     async () => {
-      const word = selectedWord;
+      const word = canonicalWord;
       await toggleLearned(word);
 
-      if (selectedWord === word) {
+      if (
+        String(
+          analysis?.dictionary_form ||
+          analysis?.word ||
+          selectedWord ||
+          ""
+        ).trim() === word
+      ) {
         renderAnalysis(analysis);
       }
     };
@@ -5311,7 +5355,11 @@ async function saveVocabulary(
 
 
   const word =
-    selectedWord;
+    String(
+      analysis?.dictionary_form ||
+      analysis?.word ||
+      selectedWord
+    ).trim();
 
 
   /* 이미 저장된 경우
@@ -5339,21 +5387,19 @@ async function saveVocabulary(
   }
 
 
-  const firstReading =
-    analysis.readings?.[0];
-
-
   const pinyin =
-    firstReading?.pinyin ||
-    "";
+    String(
+      analysis?.reading ||
+      ""
+    ).trim();
 
 
   const meaning =
     Array.isArray(
-      firstReading?.meanings
+      analysis?.meanings
     )
 
-      ? firstReading.meanings
+      ? analysis.meanings
           .join(", ")
 
       : "";
@@ -6046,7 +6092,8 @@ function renderVocabulary() {
 
 async function toggleTranslation(
   rowElement,
-  sentence
+  sentence,
+  context = []
 ) {
 
   let box =
@@ -6087,17 +6134,23 @@ async function toggleTranslation(
 
   try {
 
+    const translationKey =
+      JSON.stringify({
+        context,
+        sentence
+      });
+
     /* 현재 화면 메모리 */
 
     if (
       translationMemory.has(
-        sentence
+        translationKey
       )
     ) {
 
       box.textContent =
         translationMemory.get(
-          sentence
+          translationKey
         );
 
 
@@ -6123,7 +6176,10 @@ async function toggleTranslation(
               "sentence",
 
             sentence:
-              sentence
+              sentence,
+
+            context:
+              context
 
           }
 
@@ -6152,7 +6208,7 @@ async function toggleTranslation(
 
 
     translationMemory.set(
-      sentence,
+      translationKey,
       translation
     );
 
