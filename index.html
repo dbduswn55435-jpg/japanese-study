@@ -3706,59 +3706,102 @@ function segmentJapanese(
   sentence
 ) {
 
+  /*
+    Intl.Segmenter는 일본어 활용 어미를 잘게 나누는 경우가 있다.
+    예: 食べました → 食 / べ / ま / した
+        高かった   → 高 / か / っ / た
+        注文してくる → 注文 / し / て / くる
+
+    아래에서는 조사·종조사는 경계로 남기고,
+    동사/형용사의 활용 부분은 앞말과 다시 묶는다.
+  */
+
+  const boundaryWords = new Set([
+    "は", "が", "を", "に", "へ", "と", "も", "の", "で",
+    "から", "まで", "より", "や", "か", "ね", "よ", "ぞ", "ぜ",
+    "わ", "な", "さ", "って", "ので", "のに", "なら"
+  ]);
+
+  const auxiliaryPieces = new Set([
+    "う", "ない", "なかっ", "なく", "た", "だ", "て", "で", "ます",
+    "ま", "した", "ません", "でした", "です", "だった", "じゃ", "では",
+    "れる", "られる", "せる", "させる", "たい", "たく", "すぎる", "すぎ",
+    "そう", "よう", "くる", "きた", "いく", "いった", "いる", "いた",
+    "しまう", "しまっ", "ちゃう", "ちゃっ", "れば", "れば", "かった",
+    "くない", "くなかっ"
+  ]);
+
+  const isHiragana = text =>
+    /^[\u3040-\u309fー]+$/.test(text || "");
+
+  const hasKanji = text =>
+    /[\u3400-\u9fff]/.test(text || "");
+
   try {
 
     const segmenter =
       new Intl.Segmenter(
         "ja",
-        {
-          granularity:
-            "word"
+        { granularity: "word" }
+      );
+
+    const raw = [...segmenter.segment(sentence)]
+      .map(item => ({
+        text: item.segment,
+        isWord:
+          item.isWordLike !== false &&
+          hasJapanese(item.segment)
+      }));
+
+    const merged = [];
+
+    for (let i = 0; i < raw.length; i++) {
+      const current = raw[i];
+
+      if (!current.isWord) {
+        merged.push(current);
+        continue;
+      }
+
+      let text = current.text;
+
+      /* 한자가 들어간 어간 뒤의 활용 부분을 한 단어로 묶는다. */
+      if (hasKanji(text)) {
+        while (i + 1 < raw.length) {
+          const next = raw[i + 1];
+          if (!next.isWord || !isHiragana(next.text)) break;
+          if (boundaryWords.has(next.text)) break;
+
+          text += next.text;
+          i++;
         }
-      );
+      }
 
+      /* 히라가나로만 쓰인 동사/형용사도 활용 보조 부분은 앞말에 붙인다. */
+      while (i + 1 < raw.length) {
+        const next = raw[i + 1];
+        if (!next.isWord || !isHiragana(next.text)) break;
+        if (!auxiliaryPieces.has(next.text)) break;
 
-    return [
-      ...segmenter.segment(
-        sentence
-      )
-    ]
-      .map(
-        item => ({
+        text += next.text;
+        i++;
+      }
 
-          text:
-            item.segment,
+      merged.push({
+        text,
+        isWord: hasJapanese(text)
+      });
+    }
 
-          isWord:
-            item.isWordLike !== false &&
-            hasJapanese(
-              item.segment
-            )
-
-        })
-      );
-
+    return merged;
 
   } catch (error) {
 
-    /* Segmenter 미지원 브라우저 */
-
-    return [
-      ...String(sentence)
-    ]
-      .map(
-        char => ({
-
-          text:
-            char,
-
-          isWord:
-            hasJapanese(
-              char
-            )
-
-        })
-      );
+    return [...String(sentence)]
+      .map(char => ({
+        text: char,
+        isWord: hasJapanese(char)
+      }));
 
   }
 
@@ -5030,14 +5073,8 @@ function renderAnalysis(
       : [];
 
   block.innerHTML = `
-    ${
-      canonicalWord &&
-      canonicalWord !== selectedWord
-        ? `<div class="reading-usage">사전형 · ${escapeHtml(canonicalWord)}</div>`
-        : ""
-    }
     <div class="reading-pinyin">
-      ${escapeHtml(analysis.reading || "")}
+      ${escapeHtml(analysis.surface_reading || analysis.reading || "")}
       ${
         analysis.romaji
           ? ` · ${escapeHtml(analysis.romaji)}`
@@ -5180,39 +5217,70 @@ function renderAnalysis(
     );
   }
 
-  /* 활용 */
-  if (
-    Array.isArray(analysis.conjugations) &&
-    analysis.conjugations.length
-  ) {
+  /* 문법 · 품사: 긴 줄글 대신 학습용 줄 단위로 표시 */
+  {
+    const grammarLines = [];
 
-    addSection(
-      container,
-      "활용",
-      analysis.conjugations
-        .map(
-          item => `
-            <div class="analysis-item">
-              <strong>${escapeHtml(item.label || "")}</strong>
-              · ${escapeHtml(item.form || "")}
-              ${
-                item.reading
-                  ? `<br><small>${escapeHtml(item.reading)}</small>`
-                  : ""
-              }
-            </div>
-          `
-        )
-        .join("")
-    );
-  }
+    if (analysis.verb_class) {
+      grammarLines.push(`
+        <div class="analysis-item">
+          <strong>동사 종류</strong><br>
+          ${escapeHtml(analysis.verb_class)}
+        </div>
+      `);
+    }
 
-  if (analysis.grammar) {
-    addSection(
-      container,
-      "문법 · 품사",
-      `<p>${escapeHtml(analysis.grammar)}</p>`
-    );
+    if (canonicalWord) {
+      grammarLines.push(`
+        <div class="analysis-item">
+          <strong>기본형</strong><br>
+          ${escapeHtml(canonicalWord)}
+          ${analysis.reading ? `<br><small>${escapeHtml(analysis.reading)}</small>` : ""}
+        </div>
+      `);
+    }
+
+    const surfaceForm = String(analysis.surface_form || selectedWord || "").trim();
+    if (surfaceForm && surfaceForm !== canonicalWord) {
+      grammarLines.push(`
+        <div class="analysis-item">
+          <strong>현재 활용형</strong><br>
+          ${escapeHtml(surfaceForm)}
+          ${analysis.surface_reading ? `<br><small>${escapeHtml(analysis.surface_reading)}</small>` : ""}
+          ${analysis.conjugation_explanation ? `<br>${escapeHtml(analysis.conjugation_explanation)}` : ""}
+        </div>
+      `);
+    }
+
+    if (Array.isArray(analysis.conjugations)) {
+      analysis.conjugations.forEach(item => {
+        if (!item?.form || item.form === surfaceForm) return;
+        grammarLines.push(`
+          <div class="analysis-item">
+            <strong>${escapeHtml(item.label || "활용")}</strong><br>
+            ${escapeHtml(item.form)}
+            ${item.reading ? `<br><small>${escapeHtml(item.reading)}</small>` : ""}
+          </div>
+        `);
+      });
+    }
+
+    if (analysis.grammar) {
+      const shortLines = String(analysis.grammar)
+        .split(/\n+/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => `<div class="analysis-item">${escapeHtml(line)}</div>`);
+      grammarLines.push(...shortLines);
+    }
+
+    if (grammarLines.length) {
+      addSection(
+        container,
+        "문법 · 품사",
+        grammarLines.join("")
+      );
+    }
   }
 
   if (analysis.nuance) {
